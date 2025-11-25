@@ -1,10 +1,7 @@
 use bevy::prelude::*;
 
 #[derive(Default, Component)]
-struct Velocity {
-    x: f32,
-    y: f32,
-}
+struct Velocity(Vec2);
 
 #[derive(Component)]
 struct Player;
@@ -20,8 +17,8 @@ fn main() {
 
 fn apply_velocity(time: Res<Time>, query: Query<(&mut Transform, &Velocity)>) {
     for (mut transform, velocity) in query {
-        transform.translation.x += velocity.x * time.delta_secs();
-        transform.translation.y += velocity.y * time.delta_secs();
+        transform.translation.x += velocity.0.x * time.delta_secs();
+        transform.translation.y += velocity.0.y * time.delta_secs();
     }
 }
 
@@ -29,25 +26,35 @@ fn handle_input(
     input: Res<ButtonInput<KeyCode>>,
     mut velocity: Single<&mut Velocity, With<Player>>,
 ) {
-    let speed = 3.0;
-    velocity.x = 0.0;
-    velocity.y = 0.0;
+    let acceleration = 0.5;
+    let mut speed = 1.5;
+    let mut target_velocity = Vec2::ZERO;
+
+    if input.pressed(KeyCode::ShiftLeft) {
+        speed = 4.0;
+    }
 
     if input.pressed(KeyCode::KeyW) {
-        velocity.y += speed;
+        target_velocity.y += 1.0;
     };
 
     if input.pressed(KeyCode::KeyS) {
-        velocity.y -= speed;
+        target_velocity.y -= 1.0;
     };
 
     if input.pressed(KeyCode::KeyA) {
-        velocity.x -= speed;
+        target_velocity.x -= 1.0;
     };
 
     if input.pressed(KeyCode::KeyD) {
-        velocity.x += speed;
+        target_velocity.x += 1.0;
     };
+
+    if target_velocity.length_squared() > 0.0 {
+        target_velocity = target_velocity.normalize() * speed;
+    }
+    target_velocity = (target_velocity - velocity.0).clamp_length_max(acceleration);
+    velocity.0 += target_velocity;
 }
 
 fn setup(
@@ -59,24 +66,24 @@ fn setup(
         Camera2d,
         Projection::Orthographic(OrthographicProjection {
             scaling_mode: bevy::camera::ScalingMode::FixedVertical {
-                viewport_height: 20.0,
+                viewport_height: 10.0,
             },
             ..OrthographicProjection::default_2d()
         }),
     ));
     commands.spawn((
         Player,
-        Transform::default().with_scale(Vec3::splat(0.8)),
+        Transform::default().with_scale(Vec3::splat(0.5)),
         Velocity::default(),
-        Mesh2d(meshes.add(Rectangle::default())),
-        MeshMaterial2d(materials.add(Color::from(bevy::color::palettes::basic::WHITE))),
+        Mesh2d(meshes.add(Circle::default())),
+        MeshMaterial2d(materials.add(Color::from(bevy::color::palettes::basic::GREEN))),
     ));
 }
 
-fn print_player_info(query: Single<(&Transform, &Velocity), With<Player>>) {
-    let (transform, velocity) = (query.0, query.1);
+fn print_player_info(player: Single<(&Transform, &Velocity), With<Player>>) {
+    let (transform, velocity) = player.into_inner();
     println!(
         "Player: Position {:.2} {:.2}, Velocity {:.2} {:.2}",
-        transform.translation.x, transform.translation.y, velocity.x, velocity.y
+        transform.translation.x, transform.translation.y, velocity.0.x, velocity.0.y
     );
 }
