@@ -23,11 +23,12 @@ fn apply_velocity(time: Res<Time>, query: Query<(&mut Transform, &Velocity)>) {
 }
 
 fn handle_input(
+    time: Res<Time>,
     input: Res<ButtonInput<KeyCode>>,
     mut velocity: Single<&mut Velocity, With<Player>>,
 ) {
-    let acceleration = 0.5;
-    let mut speed = 1.5;
+    let acceleration = 10.0 * time.delta_secs();
+    let mut speed = 2.0;
     let mut target_velocity = Vec2::ZERO;
 
     if input.pressed(KeyCode::ShiftLeft) {
