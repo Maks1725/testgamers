@@ -1,4 +1,6 @@
+use bevy::color::palettes::basic::*;
 use bevy::prelude::*;
+use bevy::window::{CursorIcon, CustomCursor, CustomCursorImage};
 
 #[derive(Default, Component)]
 struct Velocity(Vec2);
@@ -6,13 +8,67 @@ struct Velocity(Vec2);
 #[derive(Component)]
 struct Player;
 
+#[derive(Component)]
+struct Cursor;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (handle_input, apply_velocity).chain())
+        .add_systems(Startup, setup_environment)
+        .add_systems(Startup, setup_cursor)
+        .add_systems(Update, (handle_keyboard_input, apply_velocity).chain())
+        .add_systems(Update, (move_camera, draw_cursor).chain())
         .add_systems(Update, print_player_info)
         .run();
+}
+
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    commands.spawn((
+        Camera2d,
+        Camera::default(),
+        Projection::Orthographic(OrthographicProjection {
+            scaling_mode: bevy::camera::ScalingMode::FixedVertical {
+                viewport_height: 10.0,
+            },
+            ..OrthographicProjection::default_2d()
+        }),
+    ));
+    commands.spawn((
+        Player,
+        Transform::default()
+            .with_scale(Vec3::splat(0.5))
+            .with_translation(Vec3::default().with_z(1.0)),
+        Velocity::default(),
+        Mesh2d(meshes.add(Circle::default())),
+        MeshMaterial2d(materials.add(Color::from(GRAY))),
+    ));
+    commands.spawn((
+        Cursor,
+        Transform::default()
+            .with_scale(Vec3::splat(0.1))
+            .with_translation(Vec3::default().with_z(10.0)),
+        Mesh2d(meshes.add(Circle::default())),
+        MeshMaterial2d(materials.add(Color::from(RED))),
+    ));
+}
+
+fn setup_environment(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    commands.spawn((
+        Transform::default()
+            .with_scale(Vec3::splat(8.0))
+            .with_translation(Vec3::default().with_z(0.0)),
+        Mesh2d(meshes.add(Rectangle::default())),
+        MeshMaterial2d(materials.add(Color::from(GREEN))),
+    ));
 }
 
 fn apply_velocity(time: Res<Time>, query: Query<(&mut Transform, &Velocity)>) {
@@ -22,12 +78,28 @@ fn apply_velocity(time: Res<Time>, query: Query<(&mut Transform, &Velocity)>) {
     }
 }
 
-fn handle_input(
+fn setup_cursor(
+    mut commands: Commands,
+    window: Single<Entity, With<Window>>,
+    asset_server: Res<AssetServer>,
+) {
+    let cursor = asset_server.load("../assets/cursor.png");
+    commands
+        .entity(*window)
+        .insert(CursorIcon::Custom(CustomCursor::Image(CustomCursorImage {
+            handle: cursor,
+            hotspot: (0, 0),
+            rect: None,
+            ..Default::default()
+        })));
+}
+
+fn handle_keyboard_input(
     time: Res<Time>,
     input: Res<ButtonInput<KeyCode>>,
     mut velocity: Single<&mut Velocity, With<Player>>,
 ) {
-    let acceleration = 10.0 * time.delta_secs();
+    let acceleration = 20.0 * time.delta_secs();
     let mut speed = 2.0;
     let mut target_velocity = Vec2::ZERO;
 
@@ -58,27 +130,27 @@ fn handle_input(
     velocity.0 += target_velocity;
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+fn draw_cursor(
+    window: Single<&Window>,
+    query: Single<(&Camera, &GlobalTransform)>,
+    mut cursor: Single<&mut Transform, With<Cursor>>,
 ) {
-    commands.spawn((
-        Camera2d,
-        Projection::Orthographic(OrthographicProjection {
-            scaling_mode: bevy::camera::ScalingMode::FixedVertical {
-                viewport_height: 10.0,
-            },
-            ..OrthographicProjection::default_2d()
-        }),
-    ));
-    commands.spawn((
-        Player,
-        Transform::default().with_scale(Vec3::splat(0.5)),
-        Velocity::default(),
-        Mesh2d(meshes.add(Circle::default())),
-        MeshMaterial2d(materials.add(Color::from(bevy::color::palettes::basic::GREEN))),
-    ));
+    let (camera, transform) = query.into_inner();
+    if let Some(cursor_position) = window.cursor_position()
+        && let Ok(world_pos) = camera.viewport_to_world_2d(transform, cursor_position)
+    {
+        cursor.translation = Vec3::new(world_pos.x, world_pos.y, cursor.translation.z);
+    }
+}
+
+fn move_camera(
+    player: Single<&Transform, With<Player>>,
+    mut camera: Single<&mut Transform, (With<Camera2d>, Without<Player>)>,
+) {
+    let Vec3 { x, y, .. } = player.translation;
+    let direction = Vec3::new(x, y, camera.translation.z);
+
+    camera.translation = camera.translation.lerp(direction, 0.2);
 }
 
 fn print_player_info(player: Single<(&Transform, &Velocity), With<Player>>) {
