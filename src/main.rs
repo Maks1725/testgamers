@@ -8,9 +8,6 @@ struct Velocity(Vec2);
 #[derive(Component)]
 struct Player;
 
-#[derive(Component)]
-struct Cursor;
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -18,7 +15,7 @@ fn main() {
         .add_systems(Startup, setup_environment)
         .add_systems(Startup, setup_cursor)
         .add_systems(Update, (handle_keyboard_input, apply_velocity).chain())
-        .add_systems(Update, (move_camera, draw_cursor).chain())
+        .add_systems(Update, move_camera)
         .add_systems(Update, print_player_info)
         .run();
 }
@@ -47,14 +44,6 @@ fn setup(
         Mesh2d(meshes.add(Circle::default())),
         MeshMaterial2d(materials.add(Color::from(GRAY))),
     ));
-    commands.spawn((
-        Cursor,
-        Transform::default()
-            .with_scale(Vec3::splat(0.1))
-            .with_translation(Vec3::default().with_z(10.0)),
-        Mesh2d(meshes.add(Circle::default())),
-        MeshMaterial2d(materials.add(Color::from(RED))),
-    ));
 }
 
 fn setup_environment(
@@ -71,27 +60,26 @@ fn setup_environment(
     ));
 }
 
-fn apply_velocity(time: Res<Time>, query: Query<(&mut Transform, &Velocity)>) {
-    for (mut transform, velocity) in query {
-        transform.translation.x += velocity.0.x * time.delta_secs();
-        transform.translation.y += velocity.0.y * time.delta_secs();
-    }
-}
-
 fn setup_cursor(
     mut commands: Commands,
     window: Single<Entity, With<Window>>,
     asset_server: Res<AssetServer>,
 ) {
-    let cursor = asset_server.load("../assets/cursor.png");
+    let cursor = asset_server.load("sight.png");
     commands
         .entity(*window)
         .insert(CursorIcon::Custom(CustomCursor::Image(CustomCursorImage {
             handle: cursor,
-            hotspot: (0, 0),
-            rect: None,
+            hotspot: (7, 7),
             ..Default::default()
         })));
+}
+
+fn apply_velocity(time: Res<Time>, query: Query<(&mut Transform, &Velocity)>) {
+    for (mut transform, velocity) in query {
+        transform.translation.x += velocity.0.x * time.delta_secs();
+        transform.translation.y += velocity.0.y * time.delta_secs();
+    }
 }
 
 fn handle_keyboard_input(
@@ -128,19 +116,6 @@ fn handle_keyboard_input(
     }
     target_velocity = (target_velocity - velocity.0).clamp_length_max(acceleration);
     velocity.0 += target_velocity;
-}
-
-fn draw_cursor(
-    window: Single<&Window>,
-    query: Single<(&Camera, &GlobalTransform)>,
-    mut cursor: Single<&mut Transform, With<Cursor>>,
-) {
-    let (camera, transform) = query.into_inner();
-    if let Some(cursor_position) = window.cursor_position()
-        && let Ok(world_pos) = camera.viewport_to_world_2d(transform, cursor_position)
-    {
-        cursor.translation = Vec3::new(world_pos.x, world_pos.y, cursor.translation.z);
-    }
 }
 
 fn move_camera(
