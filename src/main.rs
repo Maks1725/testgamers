@@ -8,6 +8,9 @@ struct Velocity(Vec2);
 #[derive(Component)]
 struct Player;
 
+#[derive(Component)]
+struct PlayerWeapon;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -15,6 +18,7 @@ fn main() {
         .add_systems(Startup, setup_environment)
         .add_systems(Startup, setup_cursor)
         .add_systems(Update, (handle_keyboard_input, apply_velocity).chain())
+        .add_systems(Update, rotate_player_weapon)
         .add_systems(Update, move_camera)
         .add_systems(Update, print_player_info)
         .run();
@@ -43,6 +47,14 @@ fn setup(
         Velocity::default(),
         Mesh2d(meshes.add(Circle::default())),
         MeshMaterial2d(materials.add(Color::from(GRAY))),
+        children![(
+            PlayerWeapon,
+            Transform::default()
+                .with_scale(vec3(0.2, 0.8, 1.0))
+                .with_translation(vec3(0.0, 0.0, 2.0)),
+            Mesh2d(meshes.add(Rectangle::default())),
+            MeshMaterial2d(materials.add(Color::from(BLACK))),
+        )],
     ));
 }
 
@@ -126,6 +138,23 @@ fn move_camera(
     let direction = Vec3::new(x, y, camera.translation.z);
 
     camera.translation = camera.translation.lerp(direction, 0.2);
+}
+
+fn rotate_player_weapon(
+    mut transform: Single<&mut Transform, (With<PlayerWeapon>, Without<Player>)>,
+    player: Single<&Transform, (With<Player>, Without<PlayerWeapon>)>,
+    query: Single<(&Camera, &GlobalTransform)>,
+    window: Single<&Window>,
+) {
+    let (camera, camera_transform) = query.into_inner();
+    if let Some(cursor_position) = window.cursor_position()
+        && let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_position)
+    {
+        let player_translation = player.translation.xy();
+        let to_cursor = (world_pos - player_translation).normalize();
+        let rotation = Quat::from_rotation_arc(Vec3::Y, to_cursor.extend(0.0));
+        transform.rotation = rotation;
+    }
 }
 
 fn print_player_info(player: Single<(&Transform, &Velocity), With<Player>>) {
